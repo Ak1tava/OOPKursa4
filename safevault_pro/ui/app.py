@@ -363,6 +363,7 @@ class SafeVaultApp(ctk.CTk):
             fg_color=COLORS["bg_card"], border_color=COLORS["border"],
             button_color=COLORS["accent"],
             dropdown_fg_color=COLORS["bg_card"],
+            state="readonly",
             command=self._on_email_filter_changed)
         self._email_combo.set("Все почты")
         self._email_combo.pack(side="left", padx=(0, 10))
@@ -526,7 +527,11 @@ class SafeVaultApp(ctk.CTk):
 
         # Обновление email-фильтра
         emails = self._db.get_unique_emails()
-        self._email_combo.configure(values=["Все почты"] + emails)
+        email_values = ["Все почты"] + emails
+        self._email_combo.configure(values=email_values)
+        if self._current_email not in emails:
+            self._current_email = ""
+        self._email_combo.set(self._current_email or "Все почты")
 
         # Обновление счётчика
         total = self._db.get_entry_count()

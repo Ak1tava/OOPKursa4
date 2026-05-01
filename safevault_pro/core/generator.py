@@ -79,10 +79,8 @@ class PasswordGenerator:
             charset += PasswordGenerator.SPECIAL
             required.append(secrets.choice(PasswordGenerator.SPECIAL))
 
-        # Если ни один набор не выбран — используем строчные буквы
         if not charset:
-            charset = PasswordGenerator.LOWERCASE
-            required.append(secrets.choice(PasswordGenerator.LOWERCASE))
+            raise ValueError("Выберите хотя бы один набор символов")
 
         # Дополнение до нужной длины случайными символами из пула
         remaining_count = length - len(required)

@@ -5,6 +5,8 @@
 записей и смены мастер-пароля.
 """
 
+import re
+
 import customtkinter as ctk
 from tkinter import messagebox
 from typing import Optional, List
@@ -29,6 +31,14 @@ COLORS = {
 }
 
 CATEGORIES = ["Соцсети", "Учеба", "Банки", "Игры", "Работа", "Другое"]
+ALLOWED_EMAIL_DOMAINS = {
+    "bk.ru",
+    "mail.ru",
+    "gmail.com",
+    "yahoo.com",
+    "yahoo.ru",
+}
+EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 
 class PasswordDialog(ctk.CTkToplevel):
@@ -155,7 +165,8 @@ class PasswordDialog(ctk.CTkToplevel):
             scroll, values=CATEGORIES, height=38,
             fg_color=COLORS["bg_card"], border_color=COLORS["border"],
             button_color=COLORS["accent"],
-            dropdown_fg_color=COLORS["bg_card"])
+            dropdown_fg_color=COLORS["bg_card"],
+            state="readonly")
         self.category_combo.set("Другое")
         self.category_combo.pack(fill="x", pady=(2, 10))
 
@@ -206,9 +217,15 @@ class PasswordDialog(ctk.CTkToplevel):
         for text, var in [("A-Z", self.upper_var), ("a-z", self.lower_var),
                           ("0-9", self.digits_var), ("!@#", self.special_var)]:
             ctk.CTkCheckBox(checks_frame, text=text, variable=var,
+                            command=self._validate_generator_options,
                             fg_color=COLORS["accent"],
                             hover_color=COLORS["accent_hover"],
                             font=ctk.CTkFont(size=12)).pack(side="left", padx=6)
+
+        self.generator_error_label = ctk.CTkLabel(
+            gen_frame, text="", text_color=COLORS["danger"],
+            font=ctk.CTkFont(size=12))
+        self.generator_error_label.pack(pady=(0, 8))
 
         # --- Кнопки ---
         btn_frame = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -231,7 +248,7 @@ class PasswordDialog(ctk.CTkToplevel):
         self.service_entry.insert(0, entry.service_name)
         self.login_entry.insert(0, entry.login)
         self.password_entry.insert(0, entry.password)
-        self.category_combo.set(entry.category)
+        self.category_combo.set(entry.category if entry.category in CATEGORIES else "Другое")
         self.email_entry.set(entry.linked_email)
         self._update_strength()
 
@@ -244,8 +261,22 @@ class PasswordDialog(ctk.CTkToplevel):
         """Обработка изменения длины пароля на слайдере."""
         self.length_label.configure(text=f"Длина: {int(value)}")
 
+    def _validate_generator_options(self) -> bool:
+        """Проверка выбора хотя бы одного набора символов."""
+        has_option = any((
+            self.upper_var.get(),
+            self.lower_var.get(),
+            self.digits_var.get(),
+            self.special_var.get(),
+        ))
+        self.generator_error_label.configure(
+            text="" if has_option else "выберите хотя бы один из пунктов")
+        return has_option
+
     def _generate_password(self):
         """Генерация пароля с текущими настройками."""
+        if not self._validate_generator_options():
+            return
         pwd = PasswordGenerator.generate(
             length=int(self.length_slider.get()),
             use_upper=self.upper_var.get(),
@@ -258,6 +289,14 @@ class PasswordDialog(ctk.CTkToplevel):
             self._password_visible = True
             self.password_entry.configure(show="")
         self._update_strength()
+
+    @staticmethod
+    def _is_valid_email(email: str) -> bool:
+        """Проверка формата и популярного домена почты."""
+        if not EMAIL_PATTERN.match(email):
+            return False
+        domain = email.rsplit("@", 1)[1].lower()
+        return domain in ALLOWED_EMAIL_DOMAINS
 
     def _update_strength(self, event=None):
         """Обновление индикатора надёжности пароля."""
@@ -277,10 +316,20 @@ class PasswordDialog(ctk.CTkToplevel):
                                    "Заполните все обязательные поля (*) !",
                                    parent=self)
             return
+        linked_email = self.email_entry.get().strip()
+        if linked_email and not self._is_valid_email(linked_email):
+            messagebox.showwarning(
+                "Ошибка",
+                "Введите корректную почту с @ и доменом bk.ru, mail.ru, gmail.com или yahoo.com.",
+                parent=self)
+            return
+        category = self.category_combo.get()
+        if category not in CATEGORIES:
+            category = "Другое"
         self.result = PasswordModel(
             service_name=svc, login=login, password=pwd,
-            category=self.category_combo.get(),
-            linked_email=self.email_entry.get().strip(),
+            category=category,
+            linked_email=linked_email,
             is_favorite=self.entry.is_favorite if self.entry else False,
             id=self.entry.id if self.entry else None)
         # Если id=None, dataclass сгенерирует UUID по умолчанию — пересоздадим
